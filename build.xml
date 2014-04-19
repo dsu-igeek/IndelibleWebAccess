@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="IndelibleWebAccess" default="buildJar" basedir=".">
+	<description>
+        Build file for iGeek, Inc. Indelible Backup System
+	</description>
+	<import file="version.xml"/>
+	<import file="../iGeekCommon/build-common.xml"/>
+	<!-- set global properties for this build -->
+	<target name="localProperties">
+		<property name="testData" location="testdata"/>
+		<property name="testTemp" location="${output}/testTemp"/>
+		<property name="jarName" value="IndelibleWebAccess.jar"/>
+	</target>
+	<target name="setupOtherProjects">
+		<addOtherProject otherProjectName="iGeekCommon" classPathRefID="localLibs"/>
+		<addOtherProject otherProjectName="IndelibleFSClient" classPathRefID="localLibs"/>
+		<addOtherProject otherProjectName="IndelibleServerCore" classPathRefID="localLibs"/>
+	</target>
+</project>

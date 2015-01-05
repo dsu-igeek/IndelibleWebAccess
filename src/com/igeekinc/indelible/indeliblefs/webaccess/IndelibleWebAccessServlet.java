@@ -28,7 +28,6 @@ import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 
 import javax.servlet.ServletException;
@@ -51,12 +50,11 @@ import org.xml.sax.SAXException;
 import com.igeekinc.indelible.indeliblefs.CreateDirectoryInfo;
 import com.igeekinc.indelible.indeliblefs.CreateFileInfo;
 import com.igeekinc.indelible.indeliblefs.IndelibleDirectoryNodeIF;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSForkIF;
+import com.igeekinc.indelible.indeliblefs.IndelibleFSServer;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleFileNodeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleServerConnectionIF;
-import com.igeekinc.indelible.indeliblefs.datamover.DataMoverSession;
 import com.igeekinc.indelible.indeliblefs.exceptions.CannotDeleteDirectoryException;
 import com.igeekinc.indelible.indeliblefs.exceptions.FileExistsException;
 import com.igeekinc.indelible.indeliblefs.exceptions.ForkNotFoundException;
@@ -65,7 +63,7 @@ import com.igeekinc.indelible.indeliblefs.exceptions.NotFileException;
 import com.igeekinc.indelible.indeliblefs.exceptions.ObjectNotFoundException;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.proxies.IndelibleFSServerProxy;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.remote.IndelibleFSForkRemoteInputStream;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServer;
@@ -79,18 +77,18 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
 {
 	private static final long serialVersionUID = 2374103832749294703L;
 
-	protected IndelibleFSServerProxy fsServer;
+	protected IndelibleFSServer fsServer;
 	protected IndelibleServerConnectionIF connection;
 	protected EntityAuthenticationServer securityServer;
 	protected Logger logger;
 
 
 
-	public IndelibleWebAccessServlet() throws IOException, UnrecoverableKeyException, InvalidKeyException, KeyStoreException, NoSuchAlgorithmException, CertificateException, IllegalStateException, NoSuchProviderException, SignatureException, AuthenticationFailureException, InterruptedException, SAXException
+	public IndelibleWebAccessServlet() throws IOException, UnrecoverableKeyException, InvalidKeyException, KeyStoreException, NoSuchAlgorithmException, CertificateException, IllegalStateException, NoSuchProviderException, SignatureException, AuthenticationFailureException, InterruptedException, SAXException, PermissionDeniedException
 	{
 		logger = Logger.getLogger(getClass());
 
-		IndelibleFSServerProxy[] servers = new IndelibleFSServerProxy[0];
+		IndelibleFSServer[] servers = new IndelibleFSServer[0];
 
 		while(servers.length == 0)
 		{
@@ -279,7 +277,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
 					FilePath childPath = createPath.getPathRelativeTo(parentPath);
 					if (childPath.getNumComponents() != 1)
 						throw new IndelibleWebAccessException(IndelibleWebAccessException.kInvalidArgument, null);
-					IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+					IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 					if (!parentNode.isDirectory())
 						throw new IndelibleWebAccessException(IndelibleWebAccessException.kNotDirectory, null);
 					IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -377,7 +375,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
 			FilePath childPath = createPath.getPathRelativeTo(parentPath);
 			if (childPath.getNumComponents() != 1)
 				throw new IndelibleWebAccessException(IndelibleWebAccessException.kInvalidArgument, null);
-			IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+			IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 			if (!parentNode.isDirectory())
 				throw new IndelibleWebAccessException(IndelibleWebAccessException.kNotDirectory, null);
 			IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -458,7 +456,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
 				IndelibleFSVolumeIF curVolume = connection.retrieveVolume(curVolumeID);
             	Element volumeElement = buildDoc.createElement("volume");
             	XMLUtils.appendSingleValElement(buildDoc, volumeElement, "id", curVolumeID.toString());
-	        	HashMap<String, Object>volumeResources = curVolume.getMetaDataResource(IndelibleFSVolumeIF.kVolumeResourcesName);
+	        	Map<String, Object>volumeResources = curVolume.getMetaDataResource(IndelibleFSVolumeIF.kVolumeResourcesName);
 	        	if (volumeResources != null)
 	        	{
 	        		String volumeName = (String) volumeResources.get(IndelibleFSVolumeIF.kVolumeNamePropertyName);
@@ -512,7 +510,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
         XMLUtils.appendSingleValElement(buildDoc, rootElem, "parentPath", reqPath.getParent().toString());
         try
         {
-            IndelibleFileNodeIF listFile = volume.getObjectByPath(listPath);
+            IndelibleFileNodeIF listFile = volume.getObjectByPath(listPath.makeAbsolute());
             if (listFile.isDirectory())
             {
                 IndelibleDirectoryNodeIF listDir = (IndelibleDirectoryNodeIF)listFile;
@@ -565,7 +563,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
         	FilePath childPath = mkdirPath.getPathRelativeTo(parentPath);
 			if (childPath.getNumComponents() != 1)
 				throw new IndelibleWebAccessException(IndelibleWebAccessException.kInvalidArgument, null);
-			IndelibleFileNodeIF parentNode = (IndelibleFileNodeIF) volume.getObjectByPath(parentPath);
+			IndelibleFileNodeIF parentNode = (IndelibleFileNodeIF) volume.getObjectByPath(parentPath.makeAbsolute());
 			if (!parentNode.isDirectory())
 				throw new IndelibleWebAccessException(IndelibleWebAccessException.kNotDirectory, null);
 			IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -632,7 +630,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
         connection.startTransaction();
         try
         {
-            sourceFile = volume.getObjectByPath(sourcePath);
+            sourceFile = volume.getObjectByPath(sourcePath.makeAbsolute());
         } catch (ObjectNotFoundException e1)
         {
             connection.rollback();
@@ -643,7 +641,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
         
         try
         {
-            checkFile = volume.getObjectByPath(destPath);
+            checkFile = volume.getObjectByPath(destPath.makeAbsolute());
             if (checkFile != null && !checkFile.isDirectory())
             {
                 throw new IndelibleWebAccessException(IndelibleWebAccessException.kDestinationExists, null);
@@ -654,7 +652,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
         {
             try
             {
-                checkFile = volume.getObjectByPath(destPath.getParent());
+                checkFile = volume.getObjectByPath(destPath.getParent().makeAbsolute());
                 createName = destPath.getName();
             }
             catch (ObjectNotFoundException e1)
@@ -768,7 +766,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
 
         try
         {
-            IndelibleFileNodeIF getFile = volume.getObjectByPath(listPath);
+            IndelibleFileNodeIF getFile = volume.getObjectByPath(listPath.makeAbsolute());
             if (getFile.isDirectory())
                 throw new IndelibleWebAccessException(IndelibleWebAccessException.kNotFile, null);
             resp.setContentType("application/x-download");
@@ -819,7 +817,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
     	connection.startTransaction();
     	try
     	{
-    		IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath);
+    		IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath.makeAbsolute());
     		if (!(parentObject instanceof IndelibleDirectoryNodeIF))
     		{
     			connection.rollback();
@@ -868,7 +866,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
     	connection.startTransaction();
     	try
     	{
-    		IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath);
+    		IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath.makeAbsolute());
     		if (!(parentObject instanceof IndelibleDirectoryNodeIF))
     		{
     			connection.rollback();
@@ -924,7 +922,7 @@ public class IndelibleWebAccessServlet extends XMLOutputServlet
         	FilePath childPath = allocatePath.getPathRelativeTo(parentPath);
 			if (childPath.getNumComponents() != 1)
 				throw new IndelibleWebAccessException(IndelibleWebAccessException.kInvalidArgument, null);
-			IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+			IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 			if (!parentNode.isDirectory())
 				throw new IndelibleWebAccessException(IndelibleWebAccessException.kNotDirectory, null);
 			IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;

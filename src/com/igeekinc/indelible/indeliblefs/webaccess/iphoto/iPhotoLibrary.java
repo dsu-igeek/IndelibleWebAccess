@@ -308,10 +308,17 @@ public class iPhotoLibrary
 					try
 					{
 						IndelibleFSForkIF dataFork = imageNode.getFork("data", false);
-						DataDescriptor dataDescriptor = dataFork.getDataDescriptor(0, dataFork.length());
-						byte [] data = dataDescriptor.getData();
-						returnStream = new ByteArrayInputStream(data);
-						//returnStream = new BufferedInputStream(new IndelibleFSForkRemoteInputStream(dataFork), 1024*1024);
+						long length = dataFork.length();
+						if (length < 8 * 1024 * 1024)
+						{
+							DataDescriptor dataDescriptor = dataFork.getDataDescriptor(0, length);
+							byte [] data = dataDescriptor.getData();
+							returnStream = new ByteArrayInputStream(data);
+						}
+						else
+						{
+							returnStream = new BufferedInputStream(new IndelibleFSForkRemoteInputStream(dataFork), 1024*1024);
+						}
 					} catch (ForkNotFoundException e)
 					{
 						Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);

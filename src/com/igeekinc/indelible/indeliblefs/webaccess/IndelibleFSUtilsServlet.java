@@ -52,15 +52,14 @@ import org.json.JSONObject;
 import com.igeekinc.indelible.indeliblefs.CreateDirectoryInfo;
 import com.igeekinc.indelible.indeliblefs.CreateFileInfo;
 import com.igeekinc.indelible.indeliblefs.IndelibleDirectoryNodeIF;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSForkIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSObjectIF;
+import com.igeekinc.indelible.indeliblefs.IndelibleFSServer;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleFileLike;
 import com.igeekinc.indelible.indeliblefs.IndelibleFileNodeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleServerConnectionIF;
 import com.igeekinc.indelible.indeliblefs.MoveObjectInfo;
-import com.igeekinc.indelible.indeliblefs.datamover.DataMoverSession;
 import com.igeekinc.indelible.indeliblefs.exceptions.CannotDeleteDirectoryException;
 import com.igeekinc.indelible.indeliblefs.exceptions.FileExistsException;
 import com.igeekinc.indelible.indeliblefs.exceptions.ForkNotFoundException;
@@ -69,7 +68,7 @@ import com.igeekinc.indelible.indeliblefs.exceptions.NotFileException;
 import com.igeekinc.indelible.indeliblefs.exceptions.ObjectNotFoundException;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.proxies.IndelibleFSServerProxy;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.remote.IndelibleFSForkRemoteInputStream;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServer;
@@ -88,7 +87,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 
 	private static final long serialVersionUID = 2374103832749294703L;
 
-    protected IndelibleFSServerProxy fsServer;
+    protected IndelibleFSServer fsServer;
     //protected IndelibleServerConnectionIF connection;
     protected ArrayList<IndelibleServerConnectionIF>connectionPool;
     protected EntityAuthenticationServer securityServer;
@@ -100,7 +99,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     {
         logger = Logger.getLogger(getClass());
 
-        IndelibleFSServerProxy[] servers = new IndelibleFSServerProxy[0];
+        IndelibleFSServer[] servers = new IndelibleFSServer[0];
         
         while(servers.length == 0)
         {
@@ -115,7 +114,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     
     public static final int kMaxSimultaneousConnections = 10;
     int numConnections = 0;
-    protected synchronized IndelibleServerConnectionIF useConnection() throws IOException
+    protected synchronized IndelibleServerConnectionIF useConnection() throws IOException, PermissionDeniedException, AuthenticationFailureException
     {
     	IndelibleServerConnectionIF returnConnection = null;
     	while (returnConnection == null)
@@ -328,14 +327,19 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     		{
     			returnConnection(connection);
     		}
-		} catch (PermissionDeniedException e) {
+		} catch (PermissionDeniedException e) 
+		{
 			throw new IndelibleMgmtException(IndelibleMgmtException.kPermissionDenied, e);
-		} catch (IOException e) {
+		} catch (IOException e)
+		{
 			throw new IndelibleMgmtException(IndelibleMgmtException.kInternalError, e);
+		} catch (AuthenticationFailureException e)
+		{
+			throw new IndelibleMgmtException(IndelibleMgmtException.kPermissionDenied, e);
 		}
     }
 	
-	public JSONObject createFile(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException
+	public JSONObject createFile(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
 	{
 		boolean completedOK = false;
 		IndelibleServerConnectionIF connection = useConnection();
@@ -370,7 +374,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 				FilePath childPath = createPath.getPathRelativeTo(parentPath);
 				if (childPath.getNumComponents() != 1)
 					throw new IndelibleMgmtException(IndelibleMgmtException.kInvalidArgument, null);
-				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 				if (!parentNode.isDirectory())
 					throw new IndelibleMgmtException(IndelibleMgmtException.kNotDirectory, null);
 				IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -455,7 +459,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 		}
 	}
 	
-	public JSONObject touch(HttpServletRequest req, HttpServletResponse resp, Map<String, String[]> paramMap) throws JSONException, IndelibleMgmtException, IOException
+	public JSONObject touch(HttpServletRequest req, HttpServletResponse resp, Map<String, String[]> paramMap) throws JSONException, IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
 	{
 		boolean completedOK = false;
 		IndelibleServerConnectionIF connection = useConnection();
@@ -484,7 +488,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 				FilePath childPath = createPath.getPathRelativeTo(parentPath);
 				if (childPath.getNumComponents() != 1)
 					throw new IndelibleMgmtException(IndelibleMgmtException.kInvalidArgument, null);
-				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 				if (!parentNode.isDirectory())
 					throw new IndelibleMgmtException(IndelibleMgmtException.kNotDirectory, null);
 				IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -557,7 +561,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 		basicMDHashMap.put(kLastModifiedTimePropertyName, modifiedTime);
 		modifiedObject.setMetaDataResource(kBasicMetaDataPropertyName, basicMDHashMap);
 	}
-    public JSONObject listVolumes(HttpServletRequest req, HttpServletResponse resp) throws IOException, JSONException, IndelibleMgmtException
+    public JSONObject listVolumes(HttpServletRequest req, HttpServletResponse resp) throws IOException, JSONException, IndelibleMgmtException, PermissionDeniedException, AuthenticationFailureException
     {
     	IndelibleServerConnectionIF connection = useConnection();
     	try
@@ -590,7 +594,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     						String [] mdNames = volume.listMetaDataResources();
     						for (String curMDName:mdNames)
     						{
-    							HashMap<String, Object>curMD = volume.getMetaDataResource(curMDName);
+    							Map<String, Object>curMD = volume.getMetaDataResource(curMDName);
     							JSONObject curMDObject = new JSONObject();
     							for (String curMDKey:curMD.keySet())
     							{
@@ -617,7 +621,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     	}
     }
     
-    public JSONObject list(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException
+    public JSONObject list(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
     {
         JSONObject returnObject = new JSONObject();
         String path=req.getPathInfo();
@@ -637,7 +641,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         {
         	synchronized(connection)
         	{
-        		IndelibleFileNodeIF listFile = volume.getObjectByPath(listPath);
+        		IndelibleFileNodeIF listFile = volume.getObjectByPath(listPath.makeAbsolute());
         		if (listFile.isDirectory())
         		{
         			IndelibleDirectoryNodeIF listDir = (IndelibleDirectoryNodeIF)listFile;
@@ -674,7 +678,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 
     }
     
-    public JSONObject mkdir(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException
+    public JSONObject mkdir(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException, AuthenticationFailureException, PermissionDeniedException
     {
         JSONObject returnObject = new JSONObject();
         JSONObject mkdirObject = new JSONObject();
@@ -700,7 +704,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 			IndelibleServerConnectionIF connection = useConnection();
 			try
 			{
-				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 				if (!parentNode.isDirectory())
 					throw new IndelibleMgmtException(IndelibleMgmtException.kNotDirectory, null);
 				IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -753,7 +757,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         return returnObject;
     }
     
-    public JSONObject duplicate(HttpServletRequest req, HttpServletResponse resp,  Map<String, String[]>paramMap) throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException
+    public JSONObject duplicate(HttpServletRequest req, HttpServletResponse resp,  Map<String, String[]>paramMap) throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException, AuthenticationFailureException
     {
         JSONObject returnObject = new JSONObject();
         JSONObject duplicateObject = new JSONObject();
@@ -793,7 +797,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         	{
         		try
         		{
-        			sourceFile = volume.getObjectByPath(sourcePath);
+        			sourceFile = volume.getObjectByPath(sourcePath.makeAbsolute());
         		} catch (ObjectNotFoundException e1)
         		{
         			throw new IndelibleMgmtException(IndelibleMgmtException.kPathNotFound, e1);
@@ -801,7 +805,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 
         		try
         		{
-        			checkFile = volume.getObjectByPath(destPath);
+        			checkFile = volume.getObjectByPath(destPath.makeAbsolute());
         			if (checkFile != null && !checkFile.isDirectory())
         			{
         				throw new IndelibleMgmtException(IndelibleMgmtException.kDestinationExists, null);
@@ -812,7 +816,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         		{
         			try
         			{
-        				checkFile = volume.getObjectByPath(destPath.getParent());
+        				checkFile = volume.getObjectByPath(destPath.getParent().makeAbsolute());
         				createName = destPath.getName();
         			}
         			catch (ObjectNotFoundException e1)
@@ -863,7 +867,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         }
     }
     
-    public JSONObject move(HttpServletRequest req, HttpServletResponse resp,  Map<String, String[]>paramMap) throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException
+    public JSONObject move(HttpServletRequest req, HttpServletResponse resp,  Map<String, String[]>paramMap) throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException, AuthenticationFailureException
     {
         JSONObject returnObject = new JSONObject();
         JSONObject moveObject = new JSONObject();
@@ -907,7 +911,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         	returnConnection(connection);
         }
     }
-    public IndelibleFSVolumeIF getVolume(String fsIDStr) throws IndelibleMgmtException, IOException
+    public IndelibleFSVolumeIF getVolume(String fsIDStr) throws IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
     {
         IndelibleFSObjectID retrieveVolumeID = (IndelibleFSObjectID) ObjectIDFactory.reconstituteFromString(fsIDStr);
         if (retrieveVolumeID == null)
@@ -939,7 +943,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 
     }
     
-    public JSONObject get(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException
+    public JSONObject get(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
     {
         String path=req.getPathInfo();
         FilePath reqPath = FilePath.getFilePath(path);
@@ -956,18 +960,25 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         {
         	try
         	{
-        		IndelibleFileNodeIF getFile = volume.getObjectByPath(listPath);
+        		IndelibleFileNodeIF getFile = volume.getObjectByPath(listPath.makeAbsolute());
         		if (getFile.isDirectory())
         			throw new IndelibleMgmtException(IndelibleMgmtException.kNotFile, null);
         		IndelibleFSForkIF dataFork = getFile.getFork("data", false);
         		if (dataFork != null)
         		{
         			IndelibleFSForkRemoteInputStream forkStream = new IndelibleFSForkRemoteInputStream(dataFork);
-        			OutputStream outStream = resp.getOutputStream();
-        			byte [] outBuffer = new byte[resp.getBufferSize()];
-        			int bytesRead;
-        			while ((bytesRead = forkStream.read(outBuffer)) > 0)
-        				outStream.write(outBuffer, 0, bytesRead);
+        			try
+        			{
+        				OutputStream outStream = resp.getOutputStream();
+        				byte [] outBuffer = new byte[resp.getBufferSize()];
+        				int bytesRead;
+        				while ((bytesRead = forkStream.read(outBuffer)) > 0)
+        					outStream.write(outBuffer, 0, bytesRead);
+        			}
+        			finally
+        			{
+        				forkStream.close();
+        			}
         		}
                 return null;
         	} catch (ObjectNotFoundException e)
@@ -990,7 +1001,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         }
     }
 
-    public JSONObject delete(HttpServletRequest req, HttpServletResponse resp)  throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException
+    public JSONObject delete(HttpServletRequest req, HttpServletResponse resp)  throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException, AuthenticationFailureException
     {
     	JSONObject returnObject = new JSONObject();
     	JSONObject deleteObject = new JSONObject();
@@ -1018,7 +1029,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     		{
     			try
     			{
-    				IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath);
+    				IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath.makeAbsolute());
     				if (!(parentObject instanceof IndelibleDirectoryNodeIF))
     				{
     					throw new IndelibleMgmtException(IndelibleMgmtException.kNotDirectory, null);
@@ -1053,7 +1064,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     	}
     }
 
-    public JSONObject rmdir(HttpServletRequest req, HttpServletResponse resp)  throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException
+    public JSONObject rmdir(HttpServletRequest req, HttpServletResponse resp)  throws IndelibleMgmtException, PermissionDeniedException, RemoteException, IOException, JSONException, AuthenticationFailureException
     {
     	JSONObject returnObject = new JSONObject();
     	JSONObject deleteObject = new JSONObject();
@@ -1081,7 +1092,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     		{
     			try
     			{
-    				IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath);
+    				IndelibleFileNodeIF parentObject = volume.getObjectByPath(parentPath.makeAbsolute());
     				if (!(parentObject instanceof IndelibleDirectoryNodeIF))
     				{
     					throw new IndelibleMgmtException(IndelibleMgmtException.kNotDirectory, null);
@@ -1118,7 +1129,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
     	}
     }
     
-    public JSONObject allocate(HttpServletRequest req, HttpServletResponse resp, Map<String, String[]>paramMap) throws JSONException, IndelibleMgmtException, IOException
+    public JSONObject allocate(HttpServletRequest req, HttpServletResponse resp, Map<String, String[]>paramMap) throws JSONException, IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
     {
         JSONObject returnObject = new JSONObject();
         JSONObject allocateObject = new JSONObject();
@@ -1154,7 +1165,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
 				throw new IndelibleMgmtException(IndelibleMgmtException.kInvalidArgument, null);
 			synchronized(connection)
 			{
-				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath);
+				IndelibleFileNodeIF parentNode = volume.getObjectByPath(parentPath.makeAbsolute());
 				if (!parentNode.isDirectory())
 					throw new IndelibleMgmtException(IndelibleMgmtException.kNotDirectory, null);
 				IndelibleDirectoryNodeIF parentDirectory = (IndelibleDirectoryNodeIF)parentNode;
@@ -1220,7 +1231,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         }
     }
     
-    public JSONObject info(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException
+    public JSONObject info(HttpServletRequest req, HttpServletResponse resp) throws JSONException, IndelibleMgmtException, IOException, PermissionDeniedException, AuthenticationFailureException
     {
         JSONObject returnObject = new JSONObject();
         JSONObject infoObject = new JSONObject();
@@ -1239,7 +1250,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         IndelibleServerConnectionIF connection = useConnection();
         try
         {
-        	IndelibleFileNodeIF infoNode = volume.getObjectByPath(infoPath);
+        	IndelibleFileNodeIF infoNode = volume.getObjectByPath(infoPath.makeAbsolute());
         	infoObject.put("fileid", infoNode.getObjectID().toString());
         	infoObject.put("directory", infoNode.isDirectory());
         	if (infoNode.isDirectory())
@@ -1252,7 +1263,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         		infoObject.put("length", ((IndelibleDirectoryNodeIF)infoNode).getNumChildren());
         	SimpleDateFormat formatter = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z");
         	formatter.setTimeZone(TimeZone.getTimeZone("GMT"));
-        	HashMap<String, Object>mdHashMap = infoNode.getMetaDataResource(IndelibleFileLike.kClientFileMetaDataPropertyName);
+        	Map<String, Object>mdHashMap = infoNode.getMetaDataResource(IndelibleFileLike.kClientFileMetaDataPropertyName);
         	long mtime;
         	if (mdHashMap != null)
         	{
@@ -1264,7 +1275,7 @@ public class IndelibleFSUtilsServlet extends HttpServlet
         	}
         	else
         	{
-        		HashMap<String, Object>basicMDHashMap = infoNode.getMetaDataResource(kBasicMetaDataPropertyName);
+        		Map<String, Object>basicMDHashMap = infoNode.getMetaDataResource(kBasicMetaDataPropertyName);
         		if (basicMDHashMap != null)
         		{
         			mtime = (Long) basicMDHashMap.get(kLastModifiedTimePropertyName);

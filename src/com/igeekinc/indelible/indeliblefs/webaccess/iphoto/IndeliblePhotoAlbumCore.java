@@ -20,8 +20,7 @@ import java.io.IOException;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
-
-import javax.servlet.ServletContext;
+import java.util.Map;
 
 import org.apache.log4j.Logger;
 import org.eclipse.jetty.security.ConstraintMapping;
@@ -31,15 +30,15 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.util.security.Constraint;
 import org.eclipse.jetty.util.security.Credential;
 
-import com.igeekinc.indelible.indeliblefs.IndelibleDirectoryNodeIF;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
+import com.igeekinc.indelible.indeliblefs.IndelibleFSServer;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleFileNodeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleServerConnectionIF;
 import com.igeekinc.indelible.indeliblefs.exceptions.ObjectNotFoundException;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.proxies.IndelibleFSServerProxy;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
+import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServer;
 import com.igeekinc.indelible.indeliblefs.webaccess.IndelibleWebAccessException;
 import com.igeekinc.indelible.oid.IndelibleFSObjectID;
@@ -49,7 +48,7 @@ import com.igeekinc.util.logging.ErrorLogMessage;
 public class IndeliblePhotoAlbumCore
 {
 	private Logger logger;
-	protected IndelibleFSServerProxy fsServer;
+	protected IndelibleFSServer fsServer;
 	protected IndelibleServerConnectionIF connection;
 	protected EntityAuthenticationServer securityServer;
 	private HashMap<IndelibleFSObjectID, LibraryPaths>libraryVolumes = new HashMap<IndelibleFSObjectID, LibraryPaths>();
@@ -58,11 +57,11 @@ public class IndeliblePhotoAlbumCore
 	public static final String kiPhotoBaseDirPropertyName = "com.igeekinc.indelible.photoalbum.iphotobasedir";
 	public static final String kiPhotoIndelibleDirPropertyName = "com.igeekinc.indelible.photoalbum.iphotoindelibledir";
 	public static final String kPhotoAlbumAccessControlPropertyName = "com.igeekinc.indelible.photoalbum.accesscontrol";
-	public IndeliblePhotoAlbumCore(ServletContextHandler context) throws IOException, InterruptedException
+	public IndeliblePhotoAlbumCore(ServletContextHandler context) throws IOException, InterruptedException, PermissionDeniedException, AuthenticationFailureException
 	{
 		logger = Logger.getLogger(getClass());
 
-		IndelibleFSServerProxy[] servers = new IndelibleFSServerProxy[0];
+		IndelibleFSServer[] servers = new IndelibleFSServer[0];
 
 		while(servers.length == 0)
 		{
@@ -79,7 +78,7 @@ public class IndeliblePhotoAlbumCore
 			try
 			{
 				IndelibleFSVolumeIF curVolume = connection.retrieveVolume(curObjectID);
-				HashMap<String, Object>photoAlbumMD = curVolume.getMetaDataResource(kPhotoAlbumMetaDataPropertyName);
+				Map<String, Object>photoAlbumMD = curVolume.getMetaDataResource(kPhotoAlbumMetaDataPropertyName);
 				if (photoAlbumMD != null)
 				{
 					String iPhotoBaseDirStr = (String) photoAlbumMD.get(kiPhotoBaseDirPropertyName);
@@ -110,7 +109,7 @@ public class IndeliblePhotoAlbumCore
 		}
 	}
 	
-	private void setupPasswords(ServletContextHandler context, IndelibleFSObjectID volumeID, HashMap<String, Object> photoAlbumMD)
+	private void setupPasswords(ServletContextHandler context, IndelibleFSObjectID volumeID, Map<String, Object> photoAlbumMD)
 	{
 
 		Object accessControlObject = photoAlbumMD.get(kPhotoAlbumAccessControlPropertyName);
@@ -170,7 +169,7 @@ public class IndeliblePhotoAlbumCore
         	try
 			{
 				IndelibleFSVolumeIF curVolume = connection.retrieveVolume(curVolumeID);
-	        	HashMap<String, Object>volumeResources = curVolume.getMetaDataResource(IndelibleFSVolumeIF.kVolumeResourcesName);
+	        	Map<String, Object>volumeResources = curVolume.getMetaDataResource(IndelibleFSVolumeIF.kVolumeResourcesName);
 	        	String volumeName = null;
 	        	if (volumeResources != null)
 	        	{

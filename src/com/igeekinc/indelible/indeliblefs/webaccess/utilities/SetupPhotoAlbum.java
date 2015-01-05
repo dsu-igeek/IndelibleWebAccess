@@ -29,6 +29,7 @@ import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.log4j.Logger;
 import org.eclipse.jetty.util.security.Credential;
@@ -146,7 +147,7 @@ public class SetupPhotoAlbum extends IndelibleFSUtilBase
         }
         try
         {
-            HashMap<String, Object>curMDProperties = volume.getMetaDataResource(IndeliblePhotoAlbumCore.kPhotoAlbumMetaDataPropertyName);
+            Map<String, Object>curMDProperties = volume.getMetaDataResource(IndeliblePhotoAlbumCore.kPhotoAlbumMetaDataPropertyName);
             if (curMDProperties == null)
             	curMDProperties = new HashMap<String, Object>();
             for (String curKey:properties.keySet())

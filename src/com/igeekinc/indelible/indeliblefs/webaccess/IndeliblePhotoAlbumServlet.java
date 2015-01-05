@@ -28,6 +28,7 @@ import java.security.NoSuchProviderException;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
@@ -48,7 +49,6 @@ import org.apache.xml.serialize.Method;
 import org.apache.xml.serialize.OutputFormat;
 import org.apache.xml.serialize.XMLSerializer;
 import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler.Context;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -641,7 +641,22 @@ public class IndeliblePhotoAlbumServlet extends XMLOutputServlet
         {
         	iPhotoLibrary library = core.getLibraryForVolume(retrieveVolumeID);
         	Face retrieveFace = library.getFaceByKey(faceKey);
-        	Image [] imagesForFace = library.getImagesForFace(retrieveFace);
+        	Image [] imagesForFaceUnfiltered = library.getImagesForFace(retrieveFace);
+        	// ZipOutputStream doesn't like having two files with the same name so make sure we don't do that
+        	Arrays.sort(imagesForFaceUnfiltered, new Comparator<Image>(){
+
+				@Override
+				public int compare(Image o1, Image o2)
+				{
+					return o1.getImagePath().getName().compareTo(o2.getImagePath().getName());
+				}
+        	});
+        	ArrayList<Image>imagesForFace = new ArrayList<Image>();
+        	for (int checkOffset = 1; checkOffset < imagesForFaceUnfiltered.length; checkOffset ++)
+        	{
+        		if (!imagesForFaceUnfiltered[checkOffset].equals(imagesForFaceUnfiltered[checkOffset - 1]))
+        			imagesForFace.add(imagesForFaceUnfiltered[checkOffset]);
+        	}
         	resp.setContentType("application/zip");
         	resp.setHeader("Content-Disposition", "attachment; filename=\"" + retrieveFace.getName() + ".zip\"");
         	ZipOutputStream outputStream = new ZipOutputStream(new BufferedOutputStream(resp.getOutputStream()));

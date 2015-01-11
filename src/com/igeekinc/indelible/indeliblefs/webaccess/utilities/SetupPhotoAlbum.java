@@ -37,7 +37,6 @@ import org.eclipse.jetty.util.security.Credential;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.utilities.IndelibleFSUtilBase;
 import com.igeekinc.indelible.indeliblefs.webaccess.iphoto.IndeliblePhotoAlbumCore;
@@ -177,12 +176,7 @@ public class SetupPhotoAlbum extends IndelibleFSUtilBase
 
         System.exit(0);
     }
-    
-    void listIndelibleFile(String listFileName, IndelibleFileNodeRemote listFile) throws RemoteException
-    {
-        System.out.println(listFile.totalLength()+" "+listFileName);
-    }
-    
+
     private void showUsage()
     {
         System.err.println("Usage: IndelibleListVolumeProperties --fsid <File System ID>");
